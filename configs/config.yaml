@@ -1,0 +1,38 @@
+# LowNoCompute-AI-Baseline Configuration
+# Example configuration for neural network training
+
+# Model Configuration
+model:
+  input_size: 10
+  hidden_size: 5
+  output_size: 3
+  learning_rate: 0.01
+  
+# Training Configuration
+training:
+  epochs: 100
+  batch_size: 32
+  validation_split: 0.2
+  early_stopping:
+    enabled: true
+    patience: 10
+    min_delta: 0.001
+  
+# Data Configuration
+data:
+  shuffle: true
+  seed: 42
+  normalize: true
+  
+# Logging Configuration
+logging:
+  verbose: true
+  log_interval: 10
+  save_checkpoints: true
+  checkpoint_dir: "checkpoints"
+  
+# Environment Configuration
+environment:
+  device: "cpu"  # Options: cpu, cuda
+  num_threads: 4
+  deterministic: false
