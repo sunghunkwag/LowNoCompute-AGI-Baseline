@@ -1,0 +1,11 @@
+# Core dependencies for LowNoCompute-AI-Baseline
+numpy>=1.21.0
+
+# Optional: For enhanced functionality
+# torch>=1.10.0  # Uncomment if you plan to extend with PyTorch
+# scikit-learn>=0.24.0  # Uncomment for additional ML utilities
+
+# Development dependencies
+# pytest>=6.2.0  # For running tests
+# black>=21.0  # For code formatting
+# flake8>=3.9.0  # For linting
