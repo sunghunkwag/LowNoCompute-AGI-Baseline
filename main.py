@@ -4,12 +4,16 @@ Minimal AI/Meta-RL Baseline with Experience-Based Reasoning
 - CPU-only, tiny memory footprint
 - Minimal meta-learning with test-time adaptation
 - Adds ExperienceBuffer for experience-based reasoning at test time
+
+Note: This implementation uses finite difference gradients for simplicity and 
+CPU compatibility. For production use, consider JAX-based auto-differentiation
+for significantly improved performance.
 """
 from __future__ import annotations
 
 import time
 import random
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Optional
 
 import numpy as np
 from collections import deque
@@ -27,6 +31,10 @@ class LightweightSSM:
     Dynamics:
       h_{t+1} = tanh(A h_t + B x_t)
       y_t     = C h_t + D x_t
+    
+    This implementation prioritizes simplicity and CPU efficiency over speed.
+    For performance-critical applications, consider JAX-based implementations
+    with auto-differentiation.
     """
 
     def __init__(self, input_dim: int = 1, hidden_dim: int = 8, output_dim: int = 1):
@@ -51,18 +59,22 @@ class LightweightSSM:
         y = self.C @ self.h + self.D @ x
         return y
 
-    def reset_state(self):
+    def reset_state(self) -> None:
+        """Reset hidden state to zeros. Call before processing new sequences."""
         self.h = np.zeros(self.hidden_dim, dtype=np.float64)
 
     def get_params(self) -> Dict[str, np.ndarray]:
+        """Get a copy of all model parameters."""
         return {"A": self.A.copy(), "B": self.B.copy(), "C": self.C.copy(), "D": self.D.copy()}
 
-    def set_params(self, params: Dict[str, np.ndarray]):
+    def set_params(self, params: Dict[str, np.ndarray]) -> None:
+        """Set model parameters with shape validation."""
         # Defensive shape checks
-        assert params["A"].shape == self.A.shape
-        assert params["B"].shape == self.B.shape
-        assert params["C"].shape == self.C.shape
-        assert params["D"].shape == self.D.shape
+        assert params["A"].shape == self.A.shape, f"A shape mismatch: expected {self.A.shape}, got {params['A'].shape}"
+        assert params["B"].shape == self.B.shape, f"B shape mismatch: expected {self.B.shape}, got {params['B'].shape}"
+        assert params["C"].shape == self.C.shape, f"C shape mismatch: expected {self.C.shape}, got {params['C'].shape}"
+        assert params["D"].shape == self.D.shape, f"D shape mismatch: expected {self.D.shape}, got {params['D'].shape}"
+        
         self.A = params["A"].astype(np.float64, copy=True)
         self.B = params["B"].astype(np.float64, copy=True)
         self.C = params["C"].astype(np.float64, copy=True)
@@ -70,10 +82,11 @@ class LightweightSSM:
 
 
 # ===============================================================
-# Loss
+# Loss Function
 # ===============================================================
 
 def mse(y_pred: np.ndarray, y_true: np.ndarray) -> float:
+    """Compute mean squared error between predictions and targets."""
     y_pred = np.asarray(y_pred, dtype=np.float64).reshape(-1)
     y_true = np.asarray(y_true, dtype=np.float64).reshape(-1)
     return float(np.mean((y_pred - y_true) ** 2))
@@ -84,17 +97,30 @@ def mse(y_pred: np.ndarray, y_true: np.ndarray) -> float:
 # ===============================================================
 class ExperienceBuffer:
     """A simple circular memory buffer to store past experiences (data samples).
+    
+    This buffer enables experience-based reasoning by storing and retrieving
+    relevant past experiences during test-time adaptation.
 
     - add(batch): appends a batch of (x, y) samples
     - get_batch(k): randomly samples up to k past samples
     """
 
     def __init__(self, max_size: int = 100):
+        """Initialize experience buffer.
+        
+        Args:
+            max_size: Maximum number of experiences to store. When full,
+                     oldest experiences are automatically removed.
+        """
         # deque with maxlen automatically drops oldest items when full
         self.buffer = deque(maxlen=max_size)
 
-    def add(self, experience_batch: List[Tuple[np.ndarray, np.ndarray]]):
-        """Add a batch of experiences to the buffer."""
+    def add(self, experience_batch: List[Tuple[np.ndarray, np.ndarray]]) -> None:
+        """Add a batch of experiences to the buffer.
+        
+        Args:
+            experience_batch: List of (input, output) tuples to store.
+        """
         if not experience_batch:
             return
         self.buffer.extend(experience_batch)
@@ -102,14 +128,20 @@ class ExperienceBuffer:
     def get_batch(self, batch_size: int) -> List[Tuple[np.ndarray, np.ndarray]]:
         """Get a random batch of experiences from the buffer.
 
-        If batch_size exceeds the current buffer length, returns as many as available.
+        Args:
+            batch_size: Number of experiences to sample.
+            
+        Returns:
+            List of (input, output) tuples. If batch_size exceeds the current 
+            buffer length, returns as many as available.
         """
         if len(self.buffer) == 0:
             return []
         actual = min(max(0, int(batch_size)), len(self.buffer))
         return random.sample(list(self.buffer), actual)
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """Return the current number of experiences in the buffer."""
         return len(self.buffer)
 
 
@@ -117,9 +149,24 @@ class ExperienceBuffer:
 # Minimal MAML with optional ExperienceBuffer for inner updates
 # ===============================================================
 class MinimalMAML:
-    """Minimal MAML-style meta-learner, now with experience buffer support."""
+    """Minimal MAML-style meta-learner with experience buffer support.
+    
+    This implementation uses finite difference gradients for simplicity and
+    CPU compatibility. While slower than auto-differentiation, it's more
+    stable and doesn't require additional dependencies.
+    
+    Key innovation: Optional integration with ExperienceBuffer for 
+    experience-enhanced adaptation during test time.
+    """
 
     def __init__(self, model: LightweightSSM, inner_lr: float = 0.02, outer_lr: float = 0.001):
+        """Initialize MinimalMAML.
+        
+        Args:
+            model: LightweightSSM to train
+            inner_lr: Learning rate for inner loop (fast adaptation)
+            outer_lr: Learning rate for outer loop (meta-learning)
+        """
         self.model = model
         self.inner_lr = float(inner_lr)
         self.outer_lr = float(outer_lr)
@@ -130,7 +177,11 @@ class MinimalMAML:
         batch: List[Tuple[np.ndarray, np.ndarray]],
         eps: float = 1e-5,
     ) -> Dict[str, np.ndarray]:
-        # Compute finite-difference gradients of loss over the provided batch
+        """Compute finite-difference gradients of loss over the provided batch.
+        
+        Note: This is O(num_parameters) which can be slow for large models.
+        For performance-critical applications, consider JAX auto-differentiation.
+        """
         grads: Dict[str, np.ndarray] = {k: np.zeros_like(v, dtype=np.float64) for k, v in params.items()}
         self.model.set_params(params)
         base_loss = 0.0
@@ -162,13 +213,24 @@ class MinimalMAML:
         support_data: List[Tuple[np.ndarray, np.ndarray]],
         steps: int = 1,
         eps: float = 1e-5,
-        experience_buffer: ExperienceBuffer | None = None,
+        experience_buffer: Optional[ExperienceBuffer] = None,
         experience_batch_size: int = 10,
     ) -> Dict[str, np.ndarray]:
-        """Performs inner-loop adaptation.
+        """Perform inner-loop adaptation (fast adaptation).
 
         If an ExperienceBuffer is provided and non-empty, its sampled experiences
         are concatenated with the provided support_data to form the adaptation batch.
+        This is the core of experience-based reasoning.
+        
+        Args:
+            support_data: List of (input, output) tuples for adaptation
+            steps: Number of gradient descent steps
+            eps: Epsilon for finite difference gradients
+            experience_buffer: Optional buffer for experience retrieval
+            experience_batch_size: Number of past experiences to retrieve
+            
+        Returns:
+            Updated parameter dictionary
         """
         params = self.model.get_params()
 
@@ -186,11 +248,15 @@ class MinimalMAML:
         self.model.set_params(params)
         return params
 
-    def meta_update(self, task_batch: List[Dict[str, Any]], eps: float = 1e-5):
-        """Outer-loop meta-update using finite differences.
+    def meta_update(self, task_batch: List[Dict[str, Any]], eps: float = 1e-5) -> None:
+        """Perform outer-loop meta-update using finite differences.
 
         Note: For educational simplicity, this retains a basic MAML-like loop.
         During meta-training we do NOT use the experience buffer to avoid leakage.
+        
+        Args:
+            task_batch: List of task dictionaries with 'support' and 'query' keys
+            eps: Epsilon for finite difference gradients
         """
         original = self.model.get_params()
         meta_grads: Dict[str, np.ndarray] = {k: np.zeros_like(v) for k, v in original.items()}
@@ -239,8 +305,12 @@ class MinimalMAML:
 def generate_simple_task(task_type: str = 'sine') -> Tuple[List[Tuple], List[Tuple]]:
     """Generate small synthetic tasks: sine or linear.
 
-    Returns (support, query) where each is a list of (x, y) pairs with shapes
-    matching model input/output (1D).
+    Args:
+        task_type: Either 'sine' for sine wave tasks or 'linear' for linear function tasks
+        
+    Returns:
+        Tuple of (support, query) where each is a list of (x, y) pairs with shapes
+        matching model input/output (1D).
     """
     rng = np.random.default_rng(int(time.time() * 1000) % 2**32)
 
@@ -252,7 +322,7 @@ def generate_simple_task(task_type: str = 'sine') -> Tuple[List[Tuple], List[Tup
         support_y = amplitude * np.sin(frequency * support_x + phase)
         query_x = rng.uniform(-2, 2, (10, 1))
         query_y = amplitude * np.sin(frequency * query_x + phase)
-    else:
+    else:  # linear
         slope = rng.uniform(-2, 2)
         intercept = rng.uniform(-1, 1)
         support_x = rng.uniform(-2, 2, (5, 1))
@@ -269,7 +339,12 @@ def generate_simple_task(task_type: str = 'sine') -> Tuple[List[Tuple], List[Tup
 # Test-time adaptation demo: with and without ExperienceBuffer
 # ===============================================================
 
-def test_time_adaptation_example(initial_params: Dict[str, np.ndarray], experience_buffer: ExperienceBuffer):
+def test_time_adaptation_example(initial_params: Dict[str, np.ndarray], experience_buffer: ExperienceBuffer) -> None:
+    """Demonstrate test-time adaptation with and without experience buffer.
+    
+    This function showcases the core benefit of experience-based reasoning:
+    improved adaptation performance by leveraging past experiences.
+    """
     print("\n=== Test-Time Adaptation Example ===")
 
     model = LightweightSSM(input_dim=1, hidden_dim=8, output_dim=1)
@@ -324,7 +399,14 @@ def test_time_adaptation_example(initial_params: Dict[str, np.ndarray], experien
 # Main: meta-train then demonstrate test-time adaptation with buffer
 # ===============================================================
 
-def main():
+def main() -> None:
+    """Main demonstration of experience-based reasoning framework.
+    
+    This function runs the complete pipeline:
+    1. Meta-training on synthetic tasks
+    2. Experience buffer accumulation
+    3. Test-time adaptation comparison
+    """
     print("Minimal AI/Meta-RL Baseline with Experience-Based Reasoning")
     print("=" * 60)
 
