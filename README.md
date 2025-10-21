@@ -178,6 +178,45 @@ This will run a complete demonstration including:
 3. Test-time adaptation comparison (with vs without experience buffer)
 4. Performance analysis showing the benefits of experience-based reasoning
 
+## Additional Examples
+
+### Basic Component Usage
+
+```bash
+# Run comprehensive examples of all components
+python examples/basic_usage.py
+```
+
+### Running Tests
+
+```bash
+# Run comprehensive test suite
+python tests/test_main.py
+```
+
+## Implementation Notes
+
+### Design Philosophy
+
+- **CPU-First**: Optimized for CPU-only environments with minimal dependencies
+- **Minimal Footprint**: Small memory usage suitable for edge devices
+- **Educational**: Simple, readable code with extensive documentation
+- **Extensible**: Modular design for easy experimentation and extension
+
+### Performance Considerations
+
+- Uses finite difference gradients for simplicity and stability
+- Float64 precision for numerical stability in gradient computation
+- Circular buffer with automatic memory management
+- Linear time complexity for SSM operations
+
+### Potential Improvements
+
+- **JAX Implementation**: For auto-differentiation and GPU acceleration
+- **Attention Mechanisms**: For more sophisticated experience retrieval
+- **Hierarchical Buffers**: For multi-scale reasoning
+- **Distributed Buffers**: For multi-agent experience sharing
+
 ## Future Directions
 
 - Hierarchical experience buffers for multi-scale reasoning
