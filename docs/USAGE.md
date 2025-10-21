@@ -2,15 +2,15 @@
 
 ## LowNoCompute-AI-Baseline
 
-This guide provides detailed instructions on how to use the LowNoCompute-AI-Baseline neural network implementation.
+This guide provides detailed instructions on how to use the experience-based reasoning components in the LowNoCompute-AI-Baseline framework.
 
 ## Table of Contents
 
 1. [Installation](#installation)
 2. [Quick Start](#quick-start)
-3. [Configuration](#configuration)
-4. [Training a Model](#training-a-model)
-5. [Testing](#testing)
+3. [Core Components](#core-components)
+4. [Basic Usage](#basic-usage)
+5. [Advanced Features](#advanced-features)
 6. [API Reference](#api-reference)
 7. [Examples](#examples)
 8. [Troubleshooting](#troubleshooting)
@@ -21,217 +21,347 @@ This guide provides detailed instructions on how to use the LowNoCompute-AI-Base
 
 ### Prerequisites
 
-- Python 3.7 or higher
+- Python 3.8 or higher
 - pip package manager
 
 ### Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+pip install numpy
 ```
 
-The main dependency is `numpy` for numerical computations.
+The framework is designed to be minimal and only requires NumPy for numerical computations.
 
 ---
 
 ## Quick Start
 
-Here's a minimal example to get you started:
+Here's a minimal example to get you started with experience-based reasoning:
 
 ```python
 import numpy as np
-from main import initialize_weights, train_step, forward_pass
+from main import LightweightSSM, ExperienceBuffer, MinimalMAML, generate_simple_task
 
-# Initialize weights
-weights = initialize_weights(input_size=10, hidden_size=5, output_size=3)
+# 1. Create components
+ssm = LightweightSSM(input_dim=1, hidden_dim=8, output_dim=1)
+maml = MinimalMAML(model=ssm, inner_lr=0.01)
+buffer = ExperienceBuffer(max_size=100)
 
-# Generate dummy data
-X = np.random.randn(32, 10)  # 32 samples, 10 features
-y = np.random.randn(32, 3)   # 32 samples, 3 outputs
+# 2. Generate and adapt to a task
+support_set, query_set = generate_simple_task('sine')
+buffer.add(support_set + query_set)  # Store as experience
 
-# Train for one step
-loss = train_step(X, y, weights, learning_rate=0.01)
-print(f"Training loss: {loss}")
+# 3. Adapt to new task using experiences
+new_support, new_query = generate_simple_task('sine')
+adapted_params = maml.inner_update(
+    new_support, 
+    steps=3, 
+    experience_buffer=buffer,
+    experience_batch_size=10
+)
 
-# Make predictions
-predictions, _ = forward_pass(X, weights)
-print(f"Predictions shape: {predictions.shape}")
+# 4. Make predictions
+test_input = np.array([0.5])
+ssm.reset_state()
+prediction = ssm.forward(test_input)
+print(f"Prediction: {prediction[0]:.4f}")
 ```
 
 ---
 
-## Configuration
+## Core Components
 
-The project includes a configuration file at `configs/config.yaml` that you can customize:
+### LightweightSSM
 
-```yaml
-model:
-  input_size: 10
-  hidden_size: 5
-  output_size: 3
-  learning_rate: 0.01
+A minimal State Space Model for efficient sequential processing.
 
-training:
-  epochs: 100
-  batch_size: 32
-  validation_split: 0.2
-```
+**Key Features:**
+- Linear time complexity for sequences
+- Stateful processing with reset capability
+- Get/set parameter interface for meta-learning
+- Pure NumPy implementation for CPU efficiency
 
-### Loading Configuration
+### ExperienceBuffer
 
-To use the configuration in your code:
+A memory buffer that stores past task experiences for retrieval during adaptation.
+
+**Key Features:**
+- Circular buffer with automatic size management
+- Random sampling for experience retrieval
+- Integration with meta-learning inner loops
+- Minimal memory footprint
+
+### MinimalMAML
+
+A simplified MAML (Model-Agnostic Meta-Learning) implementation with experience buffer support.
+
+**Key Features:**
+- Gradient-based fast adaptation
+- Optional experience-enhanced adaptation
+- Meta-learning outer loop optimization
+- Finite difference gradients (CPU-friendly)
+
+---
+
+## Basic Usage
+
+### Working with LightweightSSM
 
 ```python
-import yaml
+from main import LightweightSSM
 
-with open('configs/config.yaml', 'r') as f:
-    config = yaml.safe_load(f)
+# Create SSM
+ssm = LightweightSSM(input_dim=2, hidden_dim=4, output_dim=1)
 
-input_size = config['model']['input_size']
-hidden_size = config['model']['hidden_size']
-output_size = config['model']['output_size']
+# Process a sequence
+ssm.reset_state()  # Always reset before new sequence
+inputs = [np.array([0.1, 0.2]), np.array([0.3, 0.4])]
+for x in inputs:
+    output = ssm.forward(x)
+    print(f"Input: {x}, Output: {output[0]:.4f}")
+
+# Parameter management
+params = ssm.get_params()  # Returns dict with 'A', 'B', 'C', 'D'
+modified_params = {k: v + 0.01 for k, v in params.items()}
+ssm.set_params(modified_params)
 ```
 
----
-
-## Training a Model
-
-### Full Training Loop
-
-For a complete training example, see `examples/basic_usage.py`:
-
-```bash
-python examples/basic_usage.py
-```
-
-### Custom Training
+### Using ExperienceBuffer
 
 ```python
-import numpy as np
-from main import initialize_weights, train_step
+from main import ExperienceBuffer
 
-# Prepare data
-X_train = np.random.randn(100, 10)
-y_train = np.random.randn(100, 3)
+# Create buffer
+buffer = ExperienceBuffer(max_size=50)
 
-# Initialize model
-weights = initialize_weights(10, 5, 3)
+# Add experiences (list of (input, output) tuples)
+experiences = [
+    (np.array([0.1]), np.array([0.2])),
+    (np.array([0.3]), np.array([0.6])),
+    (np.array([0.5]), np.array([1.0]))
+]
+buffer.add(experiences)
 
-# Training loop
-for epoch in range(100):
-    loss = train_step(X_train, y_train, weights, learning_rate=0.01)
-    if (epoch + 1) % 10 == 0:
-        print(f"Epoch {epoch + 1}, Loss: {loss:.6f}")
+# Sample from buffer
+batch = buffer.get_batch(batch_size=2)
+print(f"Sampled {len(batch)} experiences")
+for x, y in batch:
+    print(f"  x: {x[0]:.3f}, y: {y[0]:.3f}")
+```
+
+### Meta-Learning with MinimalMAML
+
+```python
+from main import MinimalMAML, generate_simple_task
+
+# Setup
+ssm = LightweightSSM(input_dim=1, hidden_dim=6, output_dim=1)
+maml = MinimalMAML(model=ssm, inner_lr=0.02, outer_lr=0.001)
+
+# Generate training tasks and meta-train
+task_batch = []
+for _ in range(3):  # 3 tasks per batch
+    support, query = generate_simple_task('sine')
+    task_batch.append({'support': support, 'query': query})
+
+# Meta-update (outer loop)
+maml.meta_update(task_batch)
+
+# Fast adaptation (inner loop) on new task
+new_support, _ = generate_simple_task('linear')
+adapted_params = maml.inner_update(new_support, steps=2)
 ```
 
 ---
 
-## Testing
+## Advanced Features
 
-### Running Unit Tests
+### Experience-Enhanced Adaptation
 
-The project includes comprehensive unit tests in the `tests/` directory:
+The key innovation is combining meta-learning with experience retrieval:
 
-```bash
-python -m pytest tests/
+```python
+# 1. Build experience buffer during meta-training
+buffer = ExperienceBuffer(max_size=200)
+
+for episode in range(10):  # Meta-training episodes
+    task_batch = []
+    for _ in range(4):  # Tasks per batch
+        support, query = generate_simple_task('sine')
+        task_batch.append({'support': support, 'query': query})
+        
+        # Accumulate experiences
+        buffer.add(support + query)
+    
+    maml.meta_update(task_batch)
+
+# 2. Test-time adaptation with experience retrieval
+new_task_support, new_task_query = generate_simple_task('sine')
+
+# Adaptation WITHOUT experience buffer
+adapted_no_buffer = maml.inner_update(
+    new_task_support, 
+    steps=3, 
+    experience_buffer=None
+)
+
+# Adaptation WITH experience buffer
+adapted_with_buffer = maml.inner_update(
+    new_task_support,
+    steps=3,
+    experience_buffer=buffer,
+    experience_batch_size=15
+)
+
+# Compare performance on query set...
 ```
 
-Or run the test file directly:
+### Task Generation
 
-```bash
-python tests/test_main.py
+```python
+from main import generate_simple_task
+
+# Generate sine wave task
+support, query = generate_simple_task('sine')
+# Returns: 5 support samples, 10 query samples
+# Each sample is (x, y) where x, y are 1D numpy arrays
+
+# Generate linear function task
+support, query = generate_simple_task('linear')
+# Same format, different underlying function
+
+# Example of examining generated data
+print("Support set:")
+for i, (x, y) in enumerate(support):
+    print(f"  Sample {i+1}: x={x[0]:.3f}, y={y[0]:.3f}")
 ```
-
-### Test Coverage
-
-The tests cover:
-- Weight initialization
-- Forward pass computation
-- Loss calculation
-- Backward pass (gradients)
-- Weight updates
-- Numerical stability
 
 ---
 
 ## API Reference
 
-### Core Functions
+### LightweightSSM Class
 
-#### `initialize_weights(input_size, hidden_size, output_size)`
+#### Constructor
+```python
+LightweightSSM(input_dim=1, hidden_dim=8, output_dim=1)
+```
 
-Initializes network weights with random values.
+#### Methods
 
-**Parameters:**
-- `input_size` (int): Number of input features
-- `hidden_size` (int): Number of hidden units
-- `output_size` (int): Number of output units
+**`forward(x: np.ndarray) -> np.ndarray`**
+- Process one time step
+- **Parameters:** `x` - input vector of shape `(input_dim,)`
+- **Returns:** output vector of shape `(output_dim,)`
 
-**Returns:**
-- `weights` (dict): Dictionary containing 'W1', 'b1', 'W2', 'b2'
+**`reset_state()`**
+- Reset hidden state to zeros
+- Call before processing new sequences
 
-#### `forward_pass(X, weights)`
+**`get_params() -> Dict[str, np.ndarray]`**
+- **Returns:** dictionary with keys 'A', 'B', 'C', 'D'
 
-Performs forward propagation through the network.
+**`set_params(params: Dict[str, np.ndarray])`**
+- **Parameters:** `params` - parameter dictionary from `get_params()`
 
-**Parameters:**
-- `X` (np.ndarray): Input data of shape (batch_size, input_size)
-- `weights` (dict): Network weights
+### ExperienceBuffer Class
 
-**Returns:**
-- `output` (np.ndarray): Network predictions of shape (batch_size, output_size)
-- `cache` (dict): Intermediate values for backward pass
+#### Constructor
+```python
+ExperienceBuffer(max_size=100)
+```
 
-#### `compute_loss(predictions, targets)`
+#### Methods
 
-Computes mean squared error loss.
+**`add(experience_batch: List[Tuple[np.ndarray, np.ndarray]])`**
+- Add experiences to buffer
+- **Parameters:** `experience_batch` - list of (input, output) tuples
 
-**Parameters:**
-- `predictions` (np.ndarray): Model predictions
-- `targets` (np.ndarray): Ground truth targets
+**`get_batch(batch_size: int) -> List[Tuple[np.ndarray, np.ndarray]]`**
+- Sample random batch from buffer
+- **Parameters:** `batch_size` - number of experiences to sample
+- **Returns:** list of (input, output) tuples
 
-**Returns:**
-- `loss` (float): MSE loss value
+**`__len__() -> int`**
+- **Returns:** current number of experiences in buffer
 
-#### `train_step(X, y, weights, learning_rate)`
+### MinimalMAML Class
 
-Performs one complete training step (forward, loss, backward, update).
+#### Constructor
+```python
+MinimalMAML(model, inner_lr=0.01, outer_lr=0.001)
+```
 
-**Parameters:**
-- `X` (np.ndarray): Input batch
-- `y` (np.ndarray): Target batch
-- `weights` (dict): Network weights (updated in-place)
-- `learning_rate` (float): Learning rate
+#### Methods
 
-**Returns:**
-- `loss` (float): Training loss for this step
+**`inner_update(support_data, steps=1, eps=1e-5, experience_buffer=None, experience_batch_size=10) -> Dict[str, np.ndarray]`**
+- Perform fast adaptation (inner loop)
+- **Parameters:**
+  - `support_data` - list of (input, output) tuples
+  - `steps` - number of gradient steps
+  - `experience_buffer` - optional ExperienceBuffer for experience-enhanced adaptation
+  - `experience_batch_size` - number of experiences to sample if buffer provided
+- **Returns:** adapted parameter dictionary
+
+**`meta_update(task_batch, eps=1e-5)`**
+- Perform meta-learning update (outer loop)
+- **Parameters:**
+  - `task_batch` - list of task dictionaries with 'support' and 'query' keys
+
+### Utility Functions
+
+**`mse(y_pred: np.ndarray, y_true: np.ndarray) -> float`**
+- Compute mean squared error
+
+**`generate_simple_task(task_type='sine') -> Tuple[List, List]`**
+- Generate synthetic tasks
+- **Parameters:** `task_type` - 'sine' or 'linear'
+- **Returns:** (support_set, query_set) tuple
 
 ---
 
 ## Examples
 
-### Example 1: Basic Training
+### Example 1: Basic SSM Usage
 
-See `examples/basic_usage.py` for a complete training example.
+See `examples/basic_usage.py` for comprehensive demonstrations.
 
-### Example 2: Using Dummy Environment
+```bash
+python examples/basic_usage.py
+```
 
-The `environments/dummy_env.py` provides a simple environment for testing:
+### Example 2: Full Meta-Training Demo
+
+Run the complete experience-based reasoning demonstration:
+
+```bash
+python main.py
+```
+
+This demonstrates:
+- Meta-training on synthetic tasks
+- Experience buffer accumulation
+- Test-time adaptation comparison
+- Performance analysis
+
+### Example 3: Custom Task Domain
 
 ```python
-from environments.dummy_env import DummyEnvironment
+def custom_task_generator():
+    """Create custom task for your domain."""
+    # Your task generation logic here
+    support_set = [...]  # (input, output) tuples
+    query_set = [...]    # (input, output) tuples
+    return support_set, query_set
 
-env = DummyEnvironment(observation_dim=10, action_dim=3)
-obs = env.reset()
+# Use with existing framework
+ssm = LightweightSSM(input_dim=your_input_dim, hidden_dim=8, output_dim=your_output_dim)
+maml = MinimalMAML(model=ssm)
+buffer = ExperienceBuffer()
 
-for _ in range(5):
-    action = np.random.randint(0, env.action_dim)
-    obs, reward, done, info = env.step(action)
-    env.render()
-    if done:
-        break
-
-env.close()
+support, query = custom_task_generator()
+buffer.add(support + query)
+# ... continue with adaptation
 ```
 
 ---
@@ -240,44 +370,71 @@ env.close()
 
 ### Common Issues
 
-#### Import Error
+#### Import Errors
 
 **Problem:** `ModuleNotFoundError: No module named 'numpy'`
 
-**Solution:** Install dependencies:
+**Solution:** Install NumPy:
 ```bash
-pip install -r requirements.txt
+pip install numpy
 ```
 
-#### NaN Loss Values
+#### NaN Values During Training
 
-**Problem:** Loss becomes NaN during training
+**Problem:** Loss or predictions become NaN
 
-**Solution:** Try reducing the learning rate:
-```python
-learning_rate = 0.001  # Instead of 0.01
-```
+**Solutions:**
+- Reduce learning rates: `inner_lr=0.001, outer_lr=0.0001`
+- Check input data ranges (normalize if necessary)
+- Reduce finite difference epsilon: `eps=1e-6`
+
+#### Poor Adaptation Performance
+
+**Problem:** Model doesn't adapt well to new tasks
+
+**Solutions:**
+- Increase adaptation steps: `steps=5`
+- Tune learning rates
+- Increase hidden dimensions: `hidden_dim=16`
+- Populate experience buffer with more diverse experiences
+
+#### Memory Usage
+
+**Problem:** Experience buffer uses too much memory
+
+**Solutions:**
+- Reduce buffer size: `max_size=50`
+- Use smaller batch sizes: `experience_batch_size=5`
 
 #### Slow Training
 
 **Problem:** Training is very slow
 
-**Solution:** Reduce the number of epochs or use smaller batch sizes.
+**Solutions:**
+- The finite difference approach is inherently slower but more stable
+- Reduce model dimensions
+- Reduce number of adaptation steps
+- Consider JAX implementation for auto-differentiation (future work)
 
----
+### Performance Tips
 
-## Additional Resources
-
-- [Main README](../README.md)
-- [Example Code](../examples/)
-- [Test Suite](../tests/)
-- [Configuration Files](../configs/)
+1. **Start small**: Begin with small dimensions and grow as needed
+2. **Monitor gradients**: Check that finite difference gradients are reasonable
+3. **Experience quality**: Ensure experience buffer contains relevant, diverse examples
+4. **Task similarity**: The method works best when test tasks are similar to training tasks
 
 ---
 
 ## Contributing
 
 Feel free to open issues or submit pull requests to improve this project!
+
+### Future Enhancements
+
+- JAX-based auto-differentiation for speed
+- Hierarchical experience buffers
+- Attention-based experience retrieval
+- More sophisticated task generators
 
 ## License
 
