@@ -12,7 +12,7 @@ maml:
   inner_lr: 0.01        # Learning rate for inner loop (fast adaptation)
   outer_lr: 0.001       # Learning rate for outer loop (meta-learning)
   inner_steps: 3        # Number of gradient steps in inner loop
-  finite_diff_eps: 1e-5 # Epsilon for finite difference gradients
+  finite_diff_eps: 0.00001 # Epsilon for finite difference gradients
 
 # ExperienceBuffer Configuration
 experience_buffer:

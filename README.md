@@ -157,13 +157,14 @@ Together, these components enable robust performance even when:
 ```bash
 git clone https://github.com/sunghunkwag/LowNoCompute-AI-Baseline.git
 cd LowNoCompute-AI-Baseline
-pip install numpy
+pip install -r requirements.txt
 ```
 
 ## Requirements
 
 - Python 3.8+
-- NumPy
+- NumPy (>=1.21.0)
+- PyYAML (>=5.4.0) - for configuration management
 - (Optional) JAX for potential auto-differentiation improvements
 
 ## Running the Demo
@@ -186,6 +187,15 @@ This will run a complete demonstration including:
 # Run comprehensive examples of all components
 python examples/basic_usage.py
 ```
+
+### Using Configuration Files
+
+```bash
+# Run with YAML configuration
+python examples/main_with_config.py
+```
+
+This example demonstrates how to use `config.yaml` to configure all framework parameters.
 
 ### Running Tests
 
