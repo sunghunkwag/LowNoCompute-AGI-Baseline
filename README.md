@@ -48,97 +48,93 @@ The system combines:
 ### Basic Setup with ExperienceBuffer
 
 ```python
-import torch
-import torch.nn as nn
-from main import SSMLayer, ExperienceBuffer, MetaLearner
+import numpy as np
+from main import LightweightSSM, ExperienceBuffer, MinimalMAML
 
 # Initialize components
-input_dim = 64
-hidden_dim = 128
-action_dim = 10
+input_dim = 1
+hidden_dim = 8
+output_dim = 1
 
 # SSM for efficient sequence encoding
-ssm_encoder = SSMLayer(input_dim, hidden_dim)
+ssm_model = LightweightSSM(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim)
 
 # ExperienceBuffer for experience-based reasoning
-experience_buffer = ExperienceBuffer(
-    capacity=1000,
-    state_dim=hidden_dim,
-    action_dim=action_dim
-)
+experience_buffer = ExperienceBuffer(max_size=200)
 
 # Meta-learner for fast adaptation
-meta_learner = MetaLearner(
-    input_dim=hidden_dim,
-    output_dim=action_dim,
-    hidden_dim=256,
-    meta_lr=0.01
-)
+maml = MinimalMAML(model=ssm_model, inner_lr=0.01, outer_lr=0.001)
 
 # Training loop with experience accumulation
-def train_step(task_batch):
-    for task in task_batch:
-        # Encode task context with SSM
-        context = ssm_encoder(task['observations'])
+def train_meta_learning():
+    num_episodes = 10
+    batch_size = 4
+    
+    for episode in range(num_episodes):
+        task_batch = []
         
-        # Meta-learning inner loop
-        adapted_params = meta_learner.adapt(
-            context,
-            task['support_set']
-        )
+        for _ in range(batch_size):
+            # Generate a task (sine wave or linear function)
+            support_set, query_set = generate_simple_task('sine')  # from main.py
+            task_batch.append({'support': support_set, 'query': query_set})
+            
+            # Store experiences for future retrieval
+            experience_buffer.add(support_set)
+            experience_buffer.add(query_set)
         
-        # Store experience for future retrieval
-        experience_buffer.add(
-            state=context,
-            action=task['actions'],
-            reward=task['rewards'],
-            context_embedding=context.mean(dim=0)
-        )
-        
-        # Compute loss on query set
-        predictions = meta_learner.forward(
-            task['query_set'],
-            params=adapted_params
-        )
-        loss = compute_loss(predictions, task['query_labels'])
-        loss.backward()
+        # Meta-update using task batch
+        maml.meta_update(task_batch)
+        print(f"Episode {episode + 1} completed. Buffer size: {len(experience_buffer)}")
 
 # Test-time adaptation with experience retrieval
-def test_adapt(new_task):
-    # Encode new task
-    context = ssm_encoder(new_task['observations'])
+def test_adaptation(new_task_data):
+    """Adapt to a new task using both meta-learning and past experiences."""
     
-    # Retrieve similar past experiences
-    similar_experiences = experience_buffer.retrieve(
-        query_embedding=context.mean(dim=0),
-        k=5
+    # Method 1: Adaptation without experience buffer
+    ssm_model.reset_state()
+    adapted_params_no_buffer = maml.inner_update(
+        support_data=new_task_data, 
+        steps=3, 
+        experience_buffer=None
     )
     
-    # Adapt using both meta-learning AND retrieved experiences
-    adapted_params = meta_learner.adapt_with_experience(
-        context=context,
-        support_set=new_task['support_set'],
-        experiences=similar_experiences
+    # Method 2: Adaptation WITH experience buffer
+    ssm_model.reset_state()
+    adapted_params_with_buffer = maml.inner_update(
+        support_data=new_task_data,
+        steps=3,
+        experience_buffer=experience_buffer,
+        experience_batch_size=10
     )
     
-    # Make predictions with experience-informed adaptation
-    predictions = meta_learner.forward(
-        new_task['query_set'],
-        params=adapted_params
-    )
+    # Test predictions
+    test_input = np.array([0.8])
     
-    return predictions
+    ssm_model.set_params(adapted_params_no_buffer)
+    ssm_model.reset_state()
+    pred_no_buffer = ssm_model.forward(test_input)
+    
+    ssm_model.set_params(adapted_params_with_buffer)
+    ssm_model.reset_state()
+    pred_with_buffer = ssm_model.forward(test_input)
+    
+    return pred_no_buffer, pred_with_buffer
+
+# Example usage - run the full demo
+if __name__ == "__main__":
+    from main import main
+    main()  # Runs complete meta-training + test-time adaptation demo
 ```
 
 ### Key Integration Points
 
 1. **During Training**: 
-   - SSM processes sequences efficiently
-   - Meta-learner performs fast adaptation
-   - ExperienceBuffer accumulates task experiences
+   - SSM processes sequences efficiently with `LightweightSSM`
+   - Meta-learner performs fast adaptation with `MinimalMAML`
+   - ExperienceBuffer accumulates task experiences with `add()`
 
 2. **During Testing**:
-   - Retrieve k-nearest experiences from buffer
+   - Retrieve k-nearest experiences from buffer with `get_batch()`
    - Use experiences to stabilize and improve adaptation
    - Combine meta-learned initialization with experience-driven refinement
 
@@ -161,15 +157,26 @@ Together, these components enable robust performance even when:
 ```bash
 git clone https://github.com/sunghunkwag/LowNoCompute-AI-Baseline.git
 cd LowNoCompute-AI-Baseline
-pip install torch numpy
+pip install numpy
 ```
 
 ## Requirements
 
 - Python 3.8+
-- PyTorch 1.12+
 - NumPy
-- (Optional) Mamba SSM for optimized state space models
+- (Optional) JAX for potential auto-differentiation improvements
+
+## Running the Demo
+
+```bash
+python main.py
+```
+
+This will run a complete demonstration including:
+1. Meta-training on synthetic sine/linear tasks
+2. Building an experience buffer during training
+3. Test-time adaptation comparison (with vs without experience buffer)
+4. Performance analysis showing the benefits of experience-based reasoning
 
 ## Future Directions
 
@@ -177,6 +184,7 @@ pip install torch numpy
 - Attention-based experience retrieval mechanisms
 - Integration with other efficient architectures (RetNet, RWKV)
 - Distributed experience sharing across agents
+- JAX-based implementation for auto-differentiation
 
 ## Acknowledgments
 
