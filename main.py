@@ -358,7 +358,7 @@ def test_time_adaptation_example(initial_params: Dict[str, np.ndarray], experien
     support_data = [(x.flatten(), y.flatten()) for x, y in zip(test_x, test_y)]
 
     test_input = np.array([0.8])
-    true_value = 0.5 * np.sin(3 * 0.8 + 1.2)
+    true_value = float(0.5 * np.sin(3 * 0.8 + 1.2))
 
     # --- Case 1: Adaptation WITHOUT experience buffer ---
     print("\n[Case 1] Adapting with only 4 new examples...")
@@ -370,8 +370,8 @@ def test_time_adaptation_example(initial_params: Dict[str, np.ndarray], experien
 
     model.reset_state()
     pred_after_no_buffer = model.forward(test_input)
-    error_no_buffer = abs(pred_after_no_buffer[0] - true_value[0])
-    print(f"  - Before adaptation error: {abs(pred_before[0] - true_value[0]):.4f}")
+    error_no_buffer = abs(pred_after_no_buffer[0] - true_value)
+    print(f"  - Before adaptation error: {abs(pred_before[0] - true_value):.4f}")
     print(f"  - After adaptation error:  {error_no_buffer:.4f}")
 
     # --- Case 2: Adaptation WITH experience buffer ---
@@ -382,8 +382,8 @@ def test_time_adaptation_example(initial_params: Dict[str, np.ndarray], experien
 
     model.reset_state()
     pred_after_with_buffer = model.forward(test_input)
-    error_with_buffer = abs(pred_after_with_buffer[0] - true_value[0])
-    print(f"  - Before adaptation error: {abs(pred_before[0] - true_value[0]):.4f}")
+    error_with_buffer = abs(pred_after_with_buffer[0] - true_value)
+    print(f"  - Before adaptation error: {abs(pred_before[0] - true_value):.4f}")
     print(f"  - After adaptation error:  {error_with_buffer:.4f}")
 
     print("\n--- Comparison ---")
