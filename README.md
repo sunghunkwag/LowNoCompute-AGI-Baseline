@@ -269,7 +269,7 @@ MIT License - See [LICENSE](LICENSE) file for details.
 
 Inspired by SSM-MetaRL-TestCompute and research in meta-learning, state space models, and memory-augmented neural networks.
 
-## 📞 Support
+## 💬 Support
 
 For issues, questions, or contributions, please open an issue on GitHub.
 
