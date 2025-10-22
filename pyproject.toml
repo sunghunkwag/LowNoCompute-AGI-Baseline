@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lownocompute-ai-baseline"
+version = "1.0.0"
+description = "A minimal, modular AI baseline framework for meta-learning under strict low-compute constraints"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Sunghun Kwag", email = "your.email@example.com"}
+]
+keywords = ["meta-learning", "state-space-models", "experience-buffer", "low-compute", "AI", "machine-learning", "MAML"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "numpy>=1.21.0",
+    "pyyaml>=5.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.2.0",
+    "black>=21.0",
+    "flake8>=3.9.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/sunghunkwag/LowNoCompute-AI-Baseline"
+Documentation = "https://github.com/sunghunkwag/LowNoCompute-AI-Baseline/blob/main/README.md"
+Repository = "https://github.com/sunghunkwag/LowNoCompute-AI-Baseline"
+"Bug Tracker" = "https://github.com/sunghunkwag/LowNoCompute-AI-Baseline/issues"
+
+[tool.setuptools]
+packages = ["lownocompute_ai_baseline", "lownocompute_ai_baseline.configs"]
+
+[tool.setuptools.package-data]
+lownocompute_ai_baseline = ["configs/*.yaml"]
+
