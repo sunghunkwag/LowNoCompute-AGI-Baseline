@@ -1,5 +1,7 @@
 # LowNoCompute-AI-Baseline
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/sunghunkwag/LowNoCompute-AI-Baseline/blob/main/demo.ipynb)
+
 [![Tests](https://img.shields.io/badge/tests-19%2F19%20passing-brightgreen)](tests/test_main.py)
 [![Python](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -82,6 +84,10 @@ pip install -r requirements.txt
 ```bash
 python main.py
 ```
+
+Or run the **interactive browser demo**:
+
+- Click the Colab badge at the top or open `demo.ipynb` directly.
 
 **Expected Output**:
 ```
@@ -276,4 +282,3 @@ For issues, questions, or contributions, please open an issue on GitHub.
 ---
 
 **Status**: ✅ Production Ready | **Tests**: 19/19 Passing | **Python**: 3.8+ | **License**: MIT
-
